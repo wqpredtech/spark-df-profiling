@@ -1,6 +1,5 @@
 
 import codecs
-import logging
 import os
 from .templates import template
 from .base import describe, to_html
@@ -84,7 +83,6 @@ class ProfileReport(object):
 def profile(df, sample_size=1_000_000):
     rows_count = df.count()
     if rows_count > sample_size:
-        logging.warning()
         df = df.sample(sample_size / rows_count)
     df = df.cache()
     return ProfileReport(df).rendered_html()
