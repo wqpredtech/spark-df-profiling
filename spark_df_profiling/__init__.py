@@ -83,6 +83,8 @@ class ProfileReport(object):
 def profile(df, sample_size=1_000_000):
     rows_count = df.count()
     if rows_count > sample_size:
-        df = df.sample(sample_size / rows_count)
+        df = df.sample(sample_size / rows_count).cache()
+        return ProfileReport(df).rendered_html_sample()
+
     df = df.cache()
     return ProfileReport(df).rendered_html()
