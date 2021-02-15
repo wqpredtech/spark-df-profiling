@@ -365,10 +365,6 @@ def describe(df, bins, corr_reject, config, **kwargs):
         top["***Other Values Distinct Count***"] = others_distinct_count
         stats["value_counts"] = top
         stats["type"] = "CAT"
-        unparsed_valid_jsons = df.select(column).na.drop().rdd.map(
-            lambda x: guess_json_type(x[column])).filter(
-            lambda x: x).distinct().collect()
-        stats["unparsed_json_types"] = unparsed_valid_jsons
         return stats
 
     def describe_constant_1d(df, column):
