@@ -188,7 +188,7 @@ def describe(df, bins, corr_reject, config, **kwargs):
                                                        df_min(col(column)).alias("min"),
                                                        df_max(col(column)).alias("max"),
                                                        df_sum(col(column)).alias("sum"),
-                                                       count(col(column) == 0.0).alias('n_zeros')
+                                                       df_sum(when(col(column) == 0.0, 1).otherwise(0)).alias('n_zeros')
                                                        ).toPandas()
             stats_df["variance"] = df.select(column).na.drop().agg(variance_custom(col(column),
                                                                                    stats_df["mean"].iloc[0],
@@ -257,7 +257,7 @@ def describe(df, bins, corr_reject, config, **kwargs):
                                                        df_min(col(column)).alias("min"),
                                                        df_max(col(column)).alias("max"),
                                                        df_sum(col(column)).alias("sum"),
-                                                       count(col(column) == 0.0).alias('n_zeros')
+                                                       df_sum(when(col(column) == 0.0, 1).otherwise(0)).alias('n_zeros')
                                                        ).toPandas()
             stats_df["variance"] = df.select(column).na.drop().agg(variance_custom(col(column),
                                                                                    stats_df["mean"].iloc[0],
@@ -393,7 +393,7 @@ def describe(df, bins, corr_reject, config, **kwargs):
             raise NotImplementedError("Column {c} is of type {t} and cannot be analyzed".format(c=column, t=column_type))
 
         results_data = df.select(countDistinct(col(column)).alias("distinct_count"),
-                                 count(col(column).isNotNull()).alias('count')).toPandas()
+                                 df_sum(when(col(column).isNotNull(), 1).otherwise(0)).alias('count')).toPandas()
         results_data["p_unique"] = results_data["distinct_count"] / float(results_data["count"])
         results_data["is_unique"] = results_data["distinct_count"] == nrows
         results_data["n_missing"] = nrows - results_data["count"]

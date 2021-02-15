@@ -1,5 +1,6 @@
 
 import codecs
+import logging
 import os
 from .templates import template
 from .base import describe, to_html
@@ -12,7 +13,7 @@ class ProfileReport(object):
     html = ''
     file = None
 
-    def __init__(self, df, bins=10, sample=5, corr_reject=0.9, config={}, **kwargs):
+    def __init__(self, df, bins=10, sample=10, corr_reject=0.9, config={}, **kwargs):
 
         sample = df.limit(sample).toPandas()
 
@@ -32,13 +33,13 @@ class ProfileReport(object):
             js_path=os.path.join(library_path,'templates/js/')
             utils.fs.mkdirs("/FileStore/spark_df_profiling/css")
             utils.fs.mkdirs("/FileStore/spark_df_profiling/js")
-            utils.fs.cp("file:" + css_path + "bootstrap-theme.min.css", 
+            utils.fs.cp("file:" + css_path + "bootstrap-theme.min.css",
                         "/FileStore/spark_df_profiling/css/bootstrap-theme.min.css")
-            utils.fs.cp("file:" + css_path + "bootstrap.min.css", 
+            utils.fs.cp("file:" + css_path + "bootstrap.min.css",
                         "/FileStore/spark_df_profiling/css/bootstrap.min.css")
-            utils.fs.cp("file:" + js_path  + "bootstrap.min.js", 
+            utils.fs.cp("file:" + js_path  + "bootstrap.min.js",
                         "/FileStore/spark_df_profiling/js/bootstrap.min.js")
-            utils.fs.cp("file:" + js_path  + "jquery.min.js", 
+            utils.fs.cp("file:" + js_path  + "jquery.min.js",
                         "/FileStore/spark_df_profiling/js/jquery.min.js")
             return template('wrapper_static').render(content=self.html)
 
@@ -77,4 +78,12 @@ class ProfileReport(object):
         return "Output written to file " + str(self.file.name)
 
 
-
+def profile(df, sample_size=1_000_000_000):
+    rows_count = df.count()
+    if rows_count > sample_size:
+        logging.warning(f"Sample of {sample_size} rows will be used instead of full DataFrame (with {rows_count} rows), "
+                        f"otherwise it would take up to hour or more to compute, to compute on full DataFrame please "
+                        f"adjust `sample_size` parameter to be greater than {rows_count}")
+        df = df.sample(sample_size / rows_count)
+    df = df.cache()
+    return ProfileReport(df).rendered_html()
