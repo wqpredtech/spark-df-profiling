@@ -14,6 +14,7 @@ import base64
 from itertools import combinations
 
 import matplotlib
+
 matplotlib.use('Agg')
 
 import numpy as np
@@ -33,15 +34,25 @@ from pyspark.sql.functions import (abs as df_abs, col, count, countDistinct,
 # Backwards compatibility with Spark 1.5:
 try:
     from pyspark.sql.functions import variance, stddev, kurtosis, skewness
+
     spark_version = "1.6+"
 except ImportError:
     from pyspark.sql.functions import pow as df_pow, sqrt
+
+
     def variance_custom(column, mean, count):
-        return df_sum(df_pow(column - mean, int(2))) / float(count-1)
+        return df_sum(df_pow(column - mean, int(2))) / float(count - 1)
+
+
     def skewness_custom(column, mean, count):
-        return ((np.sqrt(count) * df_sum(df_pow(column - mean, int(3)))) / df_pow(sqrt(df_sum(df_pow(column - mean, int(2)))),3))
+        return ((np.sqrt(count) * df_sum(df_pow(column - mean, int(3)))) / df_pow(
+            sqrt(df_sum(df_pow(column - mean, int(2)))), 3))
+
+
     def kurtosis_custom(column, mean, count):
-        return ((count*df_sum(df_pow(column - mean, int(4)))) / df_pow(df_sum(df_pow(column - mean, int(2))),2)) -3
+        return ((count * df_sum(df_pow(column - mean, int(4)))) / df_pow(df_sum(df_pow(column - mean, int(2))), 2)) - 3
+
+
     spark_version = "<1.6"
 
 
@@ -103,11 +114,11 @@ def describe(df, bins, corr_reject, config, **kwargs):
             if len(left_edges) == 1:
                 next_col = current_col.when(col(column) >= float(left_edges[0]), count)
                 left_edges.pop(0)
-                return create_all_conditions(next_col, column, left_edges[:], count+1)
+                return create_all_conditions(next_col, column, left_edges[:], count + 1)
             next_col = current_col.when((float(left_edges[0]) <= col(column))
                                         & (col(column) < float(left_edges[1])), count)
             left_edges.pop(0)
-            return create_all_conditions(next_col, column, left_edges[:], count+1)
+            return create_all_conditions(next_col, column, left_edges[:], count + 1)
 
         num_range = maxim - minim
         bin_width = num_range / float(bins)
@@ -125,10 +136,10 @@ def describe(df, bins, corr_reject, config, **kwargs):
                             create_all_conditions(expression_col,
                                                   column,
                                                   left_edges_copy
-                                                 ).alias("bin_id")
-                           )
+                                                  ).alias("bin_id")
+                            )
                     .groupBy("bin_id").count()
-                   ).toPandas()
+                    ).toPandas()
 
         # If no data goes into one bin, it won't 
         # appear in bin_data; so we should fill
@@ -170,7 +181,6 @@ def describe(df, bins, corr_reject, config, **kwargs):
         plt.close(plot.figure)
         return result_string
 
-
     def describe_integer_1d(df, column, current_result, nrows):
         if spark_version == "1.6+":
             stats_df = df.select(column).na.drop().agg(mean(col(column)).alias("mean"),
@@ -181,32 +191,35 @@ def describe(df, bins, corr_reject, config, **kwargs):
                                                        stddev(col(column)).alias("std"),
                                                        skewness(col(column)).alias("skewness"),
                                                        df_sum(col(column)).alias("sum"),
-                                                       count(col(column) == 0.0).alias('n_zeros')
+                                                       df_sum(when(col(column) == 0.0, 1).otherwise(0)).alias('n_zeros')
                                                        ).toPandas()
         else:
             stats_df = df.select(column).na.drop().agg(mean(col(column)).alias("mean"),
                                                        df_min(col(column)).alias("min"),
                                                        df_max(col(column)).alias("max"),
                                                        df_sum(col(column)).alias("sum"),
-                                                       df_sum(when(col(column) == 0.0, 1).otherwise(0)).alias('n_zeros')
+                                                       count(col(column) == 0.0).alias('n_zeros')
                                                        ).toPandas()
             stats_df["variance"] = df.select(column).na.drop().agg(variance_custom(col(column),
                                                                                    stats_df["mean"].iloc[0],
-                                                                                   current_result["count"])).toPandas().iloc[0][0]
+                                                                                   current_result[
+                                                                                       "count"])).toPandas().iloc[0][0]
             stats_df["std"] = np.sqrt(stats_df["variance"])
             stats_df["skewness"] = df.select(column).na.drop().agg(skewness_custom(col(column),
                                                                                    stats_df["mean"].iloc[0],
-                                                                                   current_result["count"])).toPandas().iloc[0][0]
+                                                                                   current_result[
+                                                                                       "count"])).toPandas().iloc[0][0]
             stats_df["kurtosis"] = df.select(column).na.drop().agg(kurtosis_custom(col(column),
                                                                                    stats_df["mean"].iloc[0],
-                                                                                   current_result["count"])).toPandas().iloc[0][0]
+                                                                                   current_result[
+                                                                                       "count"])).toPandas().iloc[0][0]
 
         for x in [0.05, 0.25, 0.5, 0.75, 0.95]:
             stats_df[pretty_name(x)] = (df.select(column)
-                                        .na.drop()
-                                        .selectExpr("percentile(`{col}`,CAST({n} AS DOUBLE))"
-                                                    .format(col=column, n=x)).toPandas().iloc[:,0]
-                                        )
+                                            .na.drop()
+                                            .selectExpr("percentile(`{col}`,CAST({n} AS DOUBLE))"
+                                                        .format(col=column, n=x)).toPandas().iloc[:, 0]
+                                            )
         stats = stats_df.iloc[0].copy()
         stats.name = column
         stats["range"] = stats["max"] - stats["min"]
@@ -214,8 +227,8 @@ def describe(df, bins, corr_reject, config, **kwargs):
         stats["cv"] = stats["std"] / float(stats["mean"])
         stats["mad"] = (df.select(column)
                         .na.drop()
-                        .select(df_abs(col(column)-stats["mean"]).alias("delta"))
-                        .agg(df_sum(col("delta"))).toPandas().iloc[0,0] / float(current_result["count"]))
+                        .select(df_abs(col(column) - stats["mean"]).alias("delta"))
+                        .agg(df_sum(col("delta"))).toPandas().iloc[0, 0] / float(current_result["count"]))
         stats["type"] = "NUM"
         stats['p_zeros'] = stats['n_zeros'] / float(nrows)
 
@@ -233,7 +246,7 @@ def describe(df, bins, corr_reject, config, **kwargs):
         plot.figure.savefig(imgdata)
         imgdata.seek(0)
         stats['histogram'] = 'data:image/png;base64,' + quote(base64.b64encode(imgdata.getvalue()))
-        #TODO Think about writing this to disk instead of caching them in strings
+        # TODO Think about writing this to disk instead of caching them in strings
         plt.close(plot.figure)
 
         stats['mini_histogram'] = mini_histogram(hist_data)
@@ -250,32 +263,35 @@ def describe(df, bins, corr_reject, config, **kwargs):
                                                        stddev(col(column)).alias("std"),
                                                        skewness(col(column)).alias("skewness"),
                                                        df_sum(col(column)).alias("sum"),
-                                                       count(col(column) == 0.0).alias('n_zeros')
+                                                       df_sum(when(col(column) == 0.0, 1).otherwise(0)).alias('n_zeros')
                                                        ).toPandas()
         else:
             stats_df = df.select(column).na.drop().agg(mean(col(column)).alias("mean"),
                                                        df_min(col(column)).alias("min"),
                                                        df_max(col(column)).alias("max"),
                                                        df_sum(col(column)).alias("sum"),
-                                                       df_sum(when(col(column) == 0.0, 1).otherwise(0)).alias('n_zeros')
+                                                       count(col(column) == 0.0).alias('n_zeros')
                                                        ).toPandas()
             stats_df["variance"] = df.select(column).na.drop().agg(variance_custom(col(column),
                                                                                    stats_df["mean"].iloc[0],
-                                                                                   current_result["count"])).toPandas().iloc[0][0]
+                                                                                   current_result[
+                                                                                       "count"])).toPandas().iloc[0][0]
             stats_df["std"] = np.sqrt(stats_df["variance"])
             stats_df["skewness"] = df.select(column).na.drop().agg(skewness_custom(col(column),
                                                                                    stats_df["mean"].iloc[0],
-                                                                                   current_result["count"])).toPandas().iloc[0][0]
+                                                                                   current_result[
+                                                                                       "count"])).toPandas().iloc[0][0]
             stats_df["kurtosis"] = df.select(column).na.drop().agg(kurtosis_custom(col(column),
                                                                                    stats_df["mean"].iloc[0],
-                                                                                   current_result["count"])).toPandas().iloc[0][0]
+                                                                                   current_result[
+                                                                                       "count"])).toPandas().iloc[0][0]
 
         for x in [0.05, 0.25, 0.5, 0.75, 0.95]:
             stats_df[pretty_name(x)] = (df.select(column)
-                                        .na.drop()
-                                        .selectExpr("percentile_approx(`{col}`,CAST({n} AS DOUBLE))"
-                                                    .format(col=column, n=x)).toPandas().iloc[:,0]
-                                        )
+                                            .na.drop()
+                                            .selectExpr("percentile_approx(`{col}`,CAST({n} AS DOUBLE))"
+                                                        .format(col=column, n=x)).toPandas().iloc[:, 0]
+                                            )
         stats = stats_df.iloc[0].copy()
         stats.name = column
         stats["range"] = stats["max"] - stats["min"]
@@ -283,8 +299,8 @@ def describe(df, bins, corr_reject, config, **kwargs):
         stats["cv"] = stats["std"] / float(stats["mean"])
         stats["mad"] = (df.select(column)
                         .na.drop()
-                        .select(df_abs(col(column)-stats["mean"]).alias("delta"))
-                        .agg(df_sum(col("delta"))).toPandas().iloc[0,0] / float(current_result["count"]))
+                        .select(df_abs(col(column) - stats["mean"]).alias("delta"))
+                        .agg(df_sum(col("delta"))).toPandas().iloc[0, 0] / float(current_result["count"]))
         stats["type"] = "NUM"
         stats['p_zeros'] = stats['n_zeros'] / float(nrows)
 
@@ -302,7 +318,7 @@ def describe(df, bins, corr_reject, config, **kwargs):
         plot.figure.savefig(imgdata)
         imgdata.seek(0)
         stats['histogram'] = 'data:image/png;base64,' + quote(base64.b64encode(imgdata.getvalue()))
-        #TODO Think about writing this to disk instead of caching them in strings
+        # TODO Think about writing this to disk instead of caching them in strings
         plt.close(plot.figure)
 
         stats['mini_histogram'] = mini_histogram(hist_data)
@@ -312,7 +328,7 @@ def describe(df, bins, corr_reject, config, **kwargs):
     def describe_date_1d(df, column):
         stats_df = df.select(column).na.drop().agg(df_min(col(column)).alias("min"),
                                                    df_max(col(column)).alias("max")
-                                                  ).toPandas()
+                                                   ).toPandas()
         stats = stats_df.iloc[0].copy()
         stats.name = column
 
@@ -342,7 +358,7 @@ def describe(df, bins, corr_reject, config, **kwargs):
                         .groupBy(column)
                         .agg(count(col(column)))
                         .orderBy(count_column_name, ascending=False)
-                       ).cache()
+                        ).cache()
 
         # Get the top 50 classes by value count,
         # and put the rest of them grouped at the
@@ -356,7 +372,8 @@ def describe(df, bins, corr_reject, config, **kwargs):
         others_distinct_count = 0
         unique_categories_count = value_counts.count()
         if unique_categories_count > 50:
-            others_count = value_counts.select(df_sum(count_column_name)).toPandas().iloc[0, 0] - top_50[count_column_name].sum()
+            others_count = value_counts.select(df_sum(count_column_name)).toPandas().iloc[0, 0] - top_50[
+                count_column_name].sum()
             others_distinct_count = unique_categories_count - 50
 
         value_counts.unpersist()
@@ -371,14 +388,14 @@ def describe(df, bins, corr_reject, config, **kwargs):
         stats = pd.Series(['CONST'], index=['type'], name=column)
         stats["value_counts"] = (df.select(column)
                                  .na.drop()
-                                 .limit(1)).toPandas().iloc[:,0].value_counts()
+                                 .limit(1)).toPandas().iloc[:, 0].value_counts()
         return stats
 
     def describe_unique_1d(df, column):
         stats = pd.Series(['UNIQUE'], index=['type'], name=column)
         stats["value_counts"] = (df.select(column)
                                  .na.drop()
-                                 .limit(50)).toPandas().iloc[:,0].value_counts()
+                                 .limit(50)).toPandas().iloc[:, 0].value_counts()
         return stats
 
     def describe_1d(df, column, nrows, lookup_config=None):
@@ -386,7 +403,8 @@ def describe(df, bins, corr_reject, config, **kwargs):
         # TODO: think about implementing analysis for complex
         # data types:
         if ("array" in column_type) or ("stuct" in column_type) or ("map" in column_type):
-            raise NotImplementedError("Column {c} is of type {t} and cannot be analyzed".format(c=column, t=column_type))
+            raise NotImplementedError(
+                "Column {c} is of type {t} and cannot be analyzed".format(c=column, t=column_type))
 
         results_data = df.select(countDistinct(col(column)).alias("distinct_count"),
                                  df_sum(when(col(column).isNotNull(), 1).otherwise(0)).alias('count')).toPandas()
@@ -446,7 +464,6 @@ def describe(df, bins, corr_reject, config, **kwargs):
 
         return result
 
-
     # Do the thing:
     ldesc = {}
     for colum in df.columns:
@@ -472,14 +489,16 @@ def describe(df, bins, corr_reject, config, **kwargs):
                         break
 
                     if corr >= corr_reject:
-                        ldesc[x] = pd.Series(['CORR', y, corr], index=['type', 'correlation_var', 'correlation'], name=x)
+                        ldesc[x] = pd.Series(['CORR', y, corr], index=['type', 'correlation_var', 'correlation'],
+                                             name=x)
 
     # Convert ldesc to a DataFrame
     variable_stats = pd.DataFrame(ldesc)
 
     # General statistics
     table_stats["nvar"] = len(df.columns)
-    table_stats["total_missing"] = float(variable_stats.loc["n_missing"].sum()) / (table_stats["n"] * table_stats["nvar"])
+    table_stats["total_missing"] = float(variable_stats.loc["n_missing"].sum()) / (
+            table_stats["n"] * table_stats["nvar"])
     memsize = 0
     table_stats['memsize'] = formatters.fmt_bytesize(memsize)
     table_stats['recordsize'] = formatters.fmt_bytesize(memsize / table_stats['n'])
@@ -491,7 +510,7 @@ def describe(df, bins, corr_reject, config, **kwargs):
     for var in variable_stats:
         if "value_counts" not in variable_stats[var]:
             pass
-        elif not(variable_stats[var]["value_counts"] is np.nan):
+        elif not (variable_stats[var]["value_counts"] is np.nan):
             freq_dict[var] = variable_stats[var]["value_counts"]
         else:
             pass
@@ -503,9 +522,7 @@ def describe(df, bins, corr_reject, config, **kwargs):
     return {'table': table_stats, 'variables': variable_stats.T, 'freq': freq_dict}
 
 
-
 def to_html(sample, stats_object):
-
     """
     Generate a HTML report from summary statistics and a given sample
     Parameters
@@ -527,10 +544,12 @@ def to_html(sample, stats_object):
         raise TypeError("sample must be of type pandas.DataFrame")
 
     if not isinstance(stats_object, dict):
-        raise TypeError("stats_object must be of type dict. Did you generate this using the spark_df_profiling.describe() function?")
+        raise TypeError(
+            "stats_object must be of type dict. Did you generate this using the spark_df_profiling.describe() function?")
 
     if set(stats_object.keys()) != {'table', 'variables', 'freq'}:
-        raise TypeError("stats_object badly formatted. Did you generate this using the spark_df_profiling-eda.describe() function?")
+        raise TypeError(
+            "stats_object badly formatted. Did you generate this using the spark_df_profiling-eda.describe() function?")
 
     def fmt(value, name):
         if not isinstance(value, list):
@@ -616,15 +635,20 @@ def to_html(sample, stats_object):
         for col in set(row.index) & six.viewkeys(row_formatters):
             row_classes[col] = row_formatters[col](row[col])
             if row_classes[col] == "alert" and col in templates.messages:
-                messages.append(templates.messages[col].format(formatted_values, varname = formatters.fmt_varname(idx)))
+                messages.append(templates.messages[col].format(formatted_values, varname=formatters.fmt_varname(idx)))
 
         if row['type'] == 'CAT':
-            formatted_values['minifreqtable'] = freq_table(stats_object['freq'][idx], n_obs, stats_object['variables'].loc[idx],
-                                                           templates.template('mini_freq_table'), templates.template('mini_freq_table_row'), 3)
-            formatted_values['freqtable'] = freq_table(stats_object['freq'][idx], n_obs, stats_object['variables'].loc[idx],
-                                                       templates.template('freq_table'), templates.template('freq_table_row'), 20)
+            formatted_values['minifreqtable'] = freq_table(stats_object['freq'][idx], n_obs,
+                                                           stats_object['variables'].loc[idx],
+                                                           templates.template('mini_freq_table'),
+                                                           templates.template('mini_freq_table_row'), 3)
+            formatted_values['freqtable'] = freq_table(stats_object['freq'][idx], n_obs,
+                                                       stats_object['variables'].loc[idx],
+                                                       templates.template('freq_table'),
+                                                       templates.template('freq_table_row'), 20)
             if row['distinct_count'] > 50:
-                messages.append(templates.messages['HIGH_CARDINALITY'].format(formatted_values, varname = formatters.fmt_varname(idx)))
+                messages.append(templates.messages['HIGH_CARDINALITY'].format(formatted_values,
+                                                                              varname=formatters.fmt_varname(idx)))
                 row_classes['distinct_count'] = "alert"
             else:
                 row_classes['distinct_count'] = ""
@@ -632,14 +656,20 @@ def to_html(sample, stats_object):
         if row['type'] == 'UNIQUE':
             obs = stats_object['freq'][idx].index
 
-            formatted_values['firstn'] = pd.DataFrame(obs[0:3], columns=["First 3 values"]).to_html(classes="example_values", index=False)
-            formatted_values['lastn'] = pd.DataFrame(obs[-3:], columns=["Last 3 values"]).to_html(classes="example_values", index=False)
+            formatted_values['firstn'] = pd.DataFrame(obs[0:3], columns=["First 3 values"]).to_html(
+                classes="example_values", index=False)
+            formatted_values['lastn'] = pd.DataFrame(obs[-3:], columns=["Last 3 values"]).to_html(
+                classes="example_values", index=False)
 
             if n_obs > 40:
-                formatted_values['firstn_expanded'] = pd.DataFrame(obs[0:20], index=range(1, 21)).to_html(classes="sample table table-hover", header=False)
-                formatted_values['lastn_expanded'] = pd.DataFrame(obs[-20:], index=range(n_obs - 20 + 1, n_obs+1)).to_html(classes="sample table table-hover", header=False)
+                formatted_values['firstn_expanded'] = pd.DataFrame(obs[0:20], index=range(1, 21)).to_html(
+                    classes="sample table table-hover", header=False)
+                formatted_values['lastn_expanded'] = pd.DataFrame(obs[-20:],
+                                                                  index=range(n_obs - 20 + 1, n_obs + 1)).to_html(
+                    classes="sample table table-hover", header=False)
             else:
-                formatted_values['firstn_expanded'] = pd.DataFrame(obs, index=range(1, n_obs+1)).to_html(classes="sample table table-hover", header=False)
+                formatted_values['firstn_expanded'] = pd.DataFrame(obs, index=range(1, n_obs + 1)).to_html(
+                    classes="sample table table-hover", header=False)
                 formatted_values['lastn_expanded'] = ''
 
         rows_html += templates.row_templates_dict[row['type']].render(values=formatted_values, row_classes=row_classes)
@@ -648,24 +678,25 @@ def to_html(sample, stats_object):
             formatted_values['varname'] = formatters.fmt_varname(idx)
             messages.append(templates.messages[row['type']].format(formatted_values))
 
-
     # Overview
     formatted_values = {k: fmt(v, k) for k, v in six.iteritems(stats_object['table'])}
 
-    row_classes={}
+    row_classes = {}
     for col in six.viewkeys(stats_object['table']) & six.viewkeys(row_formatters):
         row_classes[col] = row_formatters[col](stats_object['table'][col])
         if row_classes[col] == "alert" and col in templates.messages:
-            messages.append(templates.messages[col].format(formatted_values, varname = formatters.fmt_varname(idx)))
+            messages.append(templates.messages[col].format(formatted_values, varname=formatters.fmt_varname(idx)))
 
     messages_html = u''
     for msg in messages:
         messages_html += templates.message_row.format(message=msg)
 
-    overview_html = templates.template('overview').render(values=formatted_values, row_classes = row_classes, messages=messages_html)
+    overview_html = templates.template('overview').render(values=formatted_values, row_classes=row_classes,
+                                                          messages=messages_html)
 
     # Sample
 
     sample_html = templates.template('sample').render(sample_table_html=sample.to_html(classes="sample"))
     # TODO: should be done in the template
-    return templates.template('base').render({'overview_html': overview_html, 'rows_html': rows_html, 'sample_html': sample_html})
+    return templates.template('base').render(
+        {'overview_html': overview_html, 'rows_html': rows_html, 'sample_html': sample_html})
