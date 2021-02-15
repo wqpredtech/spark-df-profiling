@@ -71,6 +71,9 @@ class ProfileReport(object):
     def rendered_html(self):
         return template('wrapper').render(content=self.html)
 
+    def rendered_html_sample(self):
+        return template('wrapper_sample').render(content=self.html)
+
     def _repr_html_(self):
         return self.html
 
@@ -78,12 +81,10 @@ class ProfileReport(object):
         return "Output written to file " + str(self.file.name)
 
 
-def profile(df, sample_size=1_000_000_000):
+def profile(df, sample_size=1_000_000):
     rows_count = df.count()
     if rows_count > sample_size:
-        logging.warning(f"Sample of {sample_size} rows will be used instead of full DataFrame (with {rows_count} rows), "
-                        f"otherwise it would take up to hour or more to compute, to compute on full DataFrame please "
-                        f"adjust `sample_size` parameter to be greater than {rows_count}")
+        logging.warning()
         df = df.sample(sample_size / rows_count)
     df = df.cache()
     return ProfileReport(df).rendered_html()

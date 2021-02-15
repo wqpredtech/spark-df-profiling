@@ -23,7 +23,8 @@ templates = {'freq_table_row': 'freq_table_row.html',
              'sample': 'sample.html',
              'base': 'base.html',
              'wrapper': 'wrapper.html',
-             'wrapper_static': 'wrapper_static.html'
+             'wrapper_static': 'wrapper_static.html',
+             'wrapper_sample': 'wrapper_sample.html'
              }
 
 # Mapping between row type and var type
